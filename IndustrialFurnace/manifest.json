@@ -1,0 +1,10 @@
+{
+  "Name": "Industrial Furnace",
+  "Author": "CountSixPackula",
+  "Version": "1.0.0",
+  "Description": "A giant furnace capable of smelting multiple ores at once.",
+  "UniqueID": "CountSixPackula.IndustrialFurnace",
+  "EntryDll": "IndustrialFurnace.dll",
+  "MinimumApiVersion": "3.14.0",
+  "UpdateKeys": [ "" ]
+}
