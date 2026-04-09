@@ -1,10 +1,10 @@
 {
-  "Name": "Industrial Furnace",
+  "Name": "Furnace Smoke Stack",
   "Author": "CountSixPackula",
   "Version": "1.0.0",
   "Description": "A giant furnace capable of smelting multiple ores at once.",
-  "UniqueID": "CountSixPackula.IndustrialFurnace",
-  "EntryDll": "IndustrialFurnace.dll",
+  "UniqueID": "CountSixPackula.FurnaceSmokeStack",
+  "EntryDll": "FurnaceSmokeStack.dll",
   "MinimumApiVersion": "3.14.0",
   "UpdateKeys": [ "" ]
 }
