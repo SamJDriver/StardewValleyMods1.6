@@ -2,6 +2,7 @@
 using Microsoft.Xna.Framework.Graphics;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
+using StardewModdingAPI.Utilities;
 using StardewValley;
 using StardewValley.Buildings;
 using StardewValley.GameData.Buildings;
@@ -26,6 +27,7 @@ public class ModEntry : Mod
 
     private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
     {
+
         Farm farm = Game1.getFarm();
         string buildingId = "Vechio.MEGAFurnace_Furnace"; // The ID from Data/Buildings
         Vector2 tileLocation = new Vector2(63, 19); // X, Y coordinates on the farm
@@ -46,72 +48,65 @@ public class ModEntry : Mod
 
         Item copperOre = ItemRegistry.Create("(O)378", 5); // Creates a stack of 5 Copper Ore
         Game1.player.addItemByMenuIfNecessary(copperOre);
-
-        this.logAllbuildings();
-    }
-
-    private void logAllbuildings()
-    {
-        // 1. Load the dictionary of all building definitions
-        Dictionary<string, BuildingData> buildingDefinitions = Game1.content.Load<Dictionary<string, BuildingData>>("Data\\Buildings");
-
-        // 2. Iterate and log the details
-        this.Monitor.Log($"Found {buildingDefinitions.Count} building definitions in Data/Buildings:", StardewModdingAPI.LogLevel.Info);
-
-        foreach (var entry in buildingDefinitions)
-        {
-            string id = entry.Key;
-            BuildingData data = entry.Value;
-
-            // Log the ID, Display Name, and associated Texture path
-            this.Monitor.Log($" - ID: {id} | Name: {data.Name} | Texture: {data.Texture}", StardewModdingAPI.LogLevel.Info);
-
-            // Optional: Log if it has any production rules (ItemConversions)
-            if (data.ItemConversions?.Count > 0)
-            {
-                this.Monitor.Log($"   --> Has {data.ItemConversions.Count} production rules.", StardewModdingAPI.LogLevel.Debug);
-            }
-        }
     }
 
     private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
     {
-        // Only check occasionally for performance (e.g., every 60 ticks/1 second)
-        if (!Context.IsWorldReady || !e.IsOneSecond) return;
+        if (!Context.IsWorldReady) return;
 
-        foreach (Building building in Game1.getFarm().buildings)
+        // Check roughly every 20 ticks (1/3 second) for a natural smoke flow
+        if (e.IsMultipleOf(20))
         {
-            if (building.buildingType.Value.ToLower().Contains("furnace") && building.hasLoaded)
+            foreach (Building building in Game1.getFarm().buildings)
             {
-                var buildingData = building.GetData();
-                //var g = building.buildingChests.Select(b => b.addWorkingAnimation);
-
-
-                if (building.buildingChests.Where(chest => chest.BaseName.ToLower().Contains("input")).Any(chest => chest.Items.Any()))
+                if (building.buildingType.Value.ToLower().Contains("furnace") && building.hasLoaded)
                 {
-                    building.texture = new Lazy<Texture2D>(delegate
+                    // Logic to check if chest has items
+                    bool isWorking = building.buildingChests
+                        .Any(chest => chest.BaseName.ToLower().Contains("input") && chest.Items.Any());
+
+                    if (isWorking)
                     {
 
-                        string text = "Buildings\\Earth Obelisk";
-                        Texture2D texture2D;
-                        try
-                        {
-                            texture2D = Game1.content.Load<Texture2D>(text);
-                        }
-                        catch
-                        {
-                            return Game1.content.Load<Texture2D>("Buildings\\Error");
-                        }
-                        return texture2D;
-                    });
-                }
-                else
-                {
-                    building.resetTexture();
+                        TemporaryAnimatedSprite smoke = this.CreateSmokeSprite(building.tileX.Value, building.tileY.Value);
+
+                        // 3. Add it to the map
+                        Game1.getFarm().TemporarySprites.Add(smoke);
+                    }
                 }
             }
-
         }
+    }
+
+    private TemporaryAnimatedSprite CreateSmokeSprite(int x, int y)
+    {
+        TemporaryAnimatedSprite sprite;
+
+        string textureName;
+        Rectangle rectangle;
+
+        textureName = Path.Combine("LooseSprites", "Cursors");
+        rectangle = new Rectangle(372, 1956, 10, 10);
+
+
+        sprite = new TemporaryAnimatedSprite(textureName,
+            rectangle,
+            new Vector2(x * 64 + 68, y * 64 + -64),
+            false,
+            1f / 500f,
+            Color.Gray)
+        {
+            alpha = 0.75f,
+            motion = new Vector2(0.0f, -0.5f),
+            acceleration = new Vector2(1f / 500f, 0.0f),
+            interval = 99999f,
+            layerDepth = 1f,
+            scale = 2,
+            scaleChange = 0.02f,
+            rotationChange = (float)(Game1.random.Next(-5, 6) * 3.14159274101257 / 256.0)
+        };
+
+        return sprite;
     }
 }
 
