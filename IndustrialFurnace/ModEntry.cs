@@ -1,18 +1,31 @@
-﻿using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
+﻿using Force.DeepCloner;
+using FurnaceSmokeStack.Utilities;
+using IndustrialFurnace;
+using Microsoft.Xna.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewModdingAPI.Utilities;
 using StardewValley;
 using StardewValley.Buildings;
-using StardewValley.GameData.Buildings;
+using StardewValley.Menus;
 
-namespace IndustrialFurnace;
+namespace FurnaceSmokeStack;
 
 public class ModEntry : Mod
 {
     private ModConfig config = null!;
     private ITranslationHelper i18n = null!;
+
+
+    private readonly PerScreen<List<Logic.IndustrialFurnace>> _onScreenFurnaces 
+        = new PerScreen<List<Logic.IndustrialFurnace>>(() => new List<Logic.IndustrialFurnace>());
+
+    private readonly string smeltingRulesDataName = PathUtilities.NormalizeAssetName("Traktori.IndustrialFurnace/SmeltingRules");
+    private readonly string smeltingRulesDataPath = Path.Combine("assets", "SmeltingRules.json");
+
+
+    private readonly PerScreen<int> _onScreenFurnacesBuilt = new PerScreen<int>(() => 0);      // Used to identify furnaces, placed in maxOccupants field.
+    private readonly PerScreen<int> currentlyLookingAtFurnace = new PerScreen<int>(() => -1);
 
 
     public override void Entry(IModHelper helper)
@@ -22,7 +35,19 @@ public class ModEntry : Mod
 
         helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
+        helper.Events.World.BuildingListChanged += this.OnBuildingListChanged;
+        helper.Events.Player.InventoryChanged += this.OnPlayerInventoryChanged;
+        helper.Events.Display.MenuChanged += this.OnMenuChanged;
+    }
 
+
+    private void OnAssetRequested(object sender, AssetRequestedEventArgs e)
+    {
+
+        if (e.Name.IsEquivalentTo(smeltingRulesDataName))
+        {
+            e.LoadFrom(() => Utils.LoadAssetOrDefault<Dictionary<string, string>>(smeltingRulesDataPath, Helper.Data, Monitor), AssetLoadPriority.Low);
+        }
     }
 
     private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
@@ -45,9 +70,6 @@ public class ModEntry : Mod
             // 3. Optional: Instantly finish construction if you don't want a "building site"
             this.Monitor.Log($"Successfully created {buildingId} at {tileLocation}.", LogLevel.Debug);
         }
-
-        Item copperOre = ItemRegistry.Create("(O)378", 5); // Creates a stack of 5 Copper Ore
-        Game1.player.addItemByMenuIfNecessary(copperOre);
     }
 
     private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
@@ -63,13 +85,11 @@ public class ModEntry : Mod
                 {
                     // Logic to check if chest has items
                     bool isWorking = building.buildingChests
-                        .Any(chest => chest.BaseName.ToLower().Contains("input") && chest.Items.Any());
+                        .Any(chest => chest.BaseName.ToLower().Contains("input") && chest.Items.Any(i => i != null));
 
                     if (isWorking)
                     {
-
                         TemporaryAnimatedSprite smoke = this.CreateSmokeSprite(building.tileX.Value, building.tileY.Value);
-
                         // 3. Add it to the map
                         Game1.getFarm().TemporarySprites.Add(smoke);
                     }
@@ -78,6 +98,111 @@ public class ModEntry : Mod
         }
     }
 
+    private void OnMenuChanged(object sender, MenuChangedEventArgs e)
+    {
+        if (e.NewMenu is null)
+        {
+
+            if (e.OldMenu is ItemGrabMenu oldGrabMenu && oldGrabMenu.context is Building closedBuilding && closedBuilding.BuildingIsIndustrialFurnaceFlag())
+            {
+                Logic.IndustrialFurnace openFurnace = _onScreenFurnaces.Value.First(f => f.IsInputChestOpenFlag);
+                openFurnace.IsInputChestOpenFlag = false;
+            }
+
+            return;
+        }
+
+        if (e.NewMenu is ItemGrabMenu newGrabMenu 
+            && newGrabMenu.context is Building openedBuilding 
+            && openedBuilding.BuildingIsIndustrialFurnaceFlag()) {
+
+            var furnaceInRange = _onScreenFurnaces.Value.First(f => f.BuildingIsInRangeOfPlayer());
+            furnaceInRange.IsInputChestOpenFlag = true;
+
+        }
+    }
+
+
+
+
+    private void OnPlayerInventoryChanged(object sender, InventoryChangedEventArgs e)
+    {
+        
+        if ((!Game1.player.currentLocation.IsBuildableLocation())
+            || _onScreenFurnaces.Value.Count() <= 0
+            || _onScreenFurnacesBuilt.Value <= 0
+            || (!_onScreenFurnaces.Value.Any(f => f.IsInputChestOpenFlag)))
+        {
+            return;
+        }
+        // Define the Ore IDs we care about
+        HashSet<string> oreIds = new HashSet<string> { "(O)378", "(O)380", "(O)384", "(O)386" };
+        int totalOresPlaced = 0;
+
+        // 1. Handle full stacks moved (Slot cleared)
+        foreach (Item item in e.Removed)
+        {
+            if (oreIds.Contains(item.QualifiedItemId))
+            {
+                totalOresPlaced += item.Stack;
+            }
+        }
+
+        // 2. Handle partial stacks moved (Stack reduced)
+        foreach (ItemStackSizeChange change in e.QuantityChanged)
+        {
+            if (oreIds.Contains(change.Item.QualifiedItemId) && change.NewSize < change.OldSize)
+            {
+                totalOresPlaced += (change.OldSize - change.NewSize);
+            }
+        }
+
+        if (totalOresPlaced > 0)
+        {
+            this.Monitor.Log($"Detected {totalOresPlaced} ores moved to the chest.", LogLevel.Info);
+        }
+
+    }
+
+
+    private void OnBuildingListChanged(object? sender, BuildingListChangedEventArgs e)
+    {
+        // Add added furnaces to the controller list
+        foreach (Building building in e.Added)
+        {
+
+            if (!building.BuildingIsIndustrialFurnaceFlag())
+            {
+                return;
+            }
+            // Add the controller that takes care of the functionality of the furnace
+            Logic.IndustrialFurnace? furnace = new Logic.IndustrialFurnace(); 
+            building.DeepCloneTo(furnace);
+
+            if (furnace == null)
+            {
+                return;
+            }
+            furnace!.IndustrialFurnaceId = _onScreenFurnacesBuilt.Value;
+
+            _onScreenFurnaces.Value.Add(furnace);
+            _onScreenFurnacesBuilt.Value++;
+
+        }
+
+        // Remove destroyed furnaces from the controller list
+        //foreach (Building building in e.Removed)
+        //{
+        //    if (building.BuildingIsIndustrialFurnaceFlag())
+        //    {
+
+
+        //            _onScreenFurnaces.Value.RemoveWhere(f => f.Id == )
+
+        //    }
+        //}
+    }
+   
     private TemporaryAnimatedSprite CreateSmokeSprite(int x, int y)
     {
         TemporaryAnimatedSprite sprite;
