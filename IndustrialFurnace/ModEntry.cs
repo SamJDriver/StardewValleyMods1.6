@@ -1,4 +1,5 @@
 ﻿using Force.DeepCloner;
+using FurnaceSmokeStack.Data;
 using FurnaceSmokeStack.Utilities;
 using IndustrialFurnace;
 using Microsoft.Xna.Framework;
@@ -20,34 +21,23 @@ public class ModEntry : Mod
     private readonly PerScreen<List<Logic.IndustrialFurnace>> _onScreenFurnaces 
         = new PerScreen<List<Logic.IndustrialFurnace>>(() => new List<Logic.IndustrialFurnace>());
 
-    private readonly string smeltingRulesDataName = PathUtilities.NormalizeAssetName("Traktori.IndustrialFurnace/SmeltingRules");
-    private readonly string smeltingRulesDataPath = Path.Combine("assets", "SmeltingRules.json");
-
-
     private readonly PerScreen<int> _onScreenFurnacesBuilt = new PerScreen<int>(() => 0);      // Used to identify furnaces, placed in maxOccupants field.
-    private readonly PerScreen<int> currentlyLookingAtFurnace = new PerScreen<int>(() => -1);
 
+    private SmeltingRules smeltingRules;
 
     public override void Entry(IModHelper helper)
     {
         i18n = helper.Translation;
         config = helper.ReadConfig<ModConfig>();
 
+        this.smeltingRules = helper.Data.ReadJsonFile<SmeltingRules>("assets/SmeltingRules.json");
+
+
         helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
         helper.Events.World.BuildingListChanged += this.OnBuildingListChanged;
         helper.Events.Player.InventoryChanged += this.OnPlayerInventoryChanged;
         helper.Events.Display.MenuChanged += this.OnMenuChanged;
-    }
-
-
-    private void OnAssetRequested(object sender, AssetRequestedEventArgs e)
-    {
-
-        if (e.Name.IsEquivalentTo(smeltingRulesDataName))
-        {
-            e.LoadFrom(() => Utils.LoadAssetOrDefault<Dictionary<string, string>>(smeltingRulesDataPath, Helper.Data, Monitor), AssetLoadPriority.Low);
-        }
     }
 
     private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
@@ -136,30 +126,38 @@ public class ModEntry : Mod
             return;
         }
         // Define the Ore IDs we care about
-        HashSet<string> oreIds = new HashSet<string> { "(O)378", "(O)380", "(O)384", "(O)386" };
+        //HashSet<string> oreIds = new HashSet<string> { "(O)378", "(O)380", "(O)384", "(O)386" };
         int totalOresPlaced = 0;
+        string itemQualifiedId = "";
 
         // 1. Handle full stacks moved (Slot cleared)
         foreach (Item item in e.Removed)
         {
-            if (oreIds.Contains(item.QualifiedItemId))
+            if (smeltingRules.OreCoalCosts.Any(o => o.QualifiedItemId == item.QualifiedItemId))
             {
                 totalOresPlaced += item.Stack;
+                itemQualifiedId = item.QualifiedItemId;
             }
         }
 
         // 2. Handle partial stacks moved (Stack reduced)
         foreach (ItemStackSizeChange change in e.QuantityChanged)
         {
-            if (oreIds.Contains(change.Item.QualifiedItemId) && change.NewSize < change.OldSize)
+            if (smeltingRules.OreCoalCosts.Any(o => o.QualifiedItemId == change.Item.QualifiedItemId) && change.NewSize < change.OldSize)
             {
                 totalOresPlaced += (change.OldSize - change.NewSize);
+                itemQualifiedId = change.Item.QualifiedItemId;
             }
         }
 
         if (totalOresPlaced > 0)
         {
             this.Monitor.Log($"Detected {totalOresPlaced} ores moved to the chest.", LogLevel.Info);
+            this.Monitor.Log($"Removed item {itemQualifiedId}.", LogLevel.Info);
+
+
+            int amountOfCoalToRemove = (smeltingRules.OreCoalCosts.First(o => o.QualifiedItemId == itemQualifiedId).CoalRequiredToSmelt) * (totalOresPlaced);
+            Utils.RemoveItemFromPlayerInventory("(O)382", amountOfCoalToRemove);
         }
 
     }

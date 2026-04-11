@@ -1,9 +1,40 @@
 {
-	"(O)378": 2,
-	"(O)380": 2,
-	"(O)384": 2,
-	"(O)386": 2,
-	"(O)909": 2,
-	"(O)80":  2,
-	"(O)82":  2
+	"OreCoalCosts": [
+		{
+			"QualifiedItemId": "(O)378",
+			"CoalRequiredToSmelt": 1
+		},
+		{
+			"QualifiedItemId": "(O)380",
+			"CoalRequiredToSmelt": 1
+		},
+		{
+			"QualifiedItemId": "(O)384",
+			"CoalRequiredToSmelt": 1
+		},
+		{
+			"QualifiedItemId": "(O)386",
+			"CoalRequiredToSmelt": 1
+		},
+		{
+			"QualifiedItemId": "(O)909",
+			"CoalRequiredToSmelt": 1
+		},
+		{
+			"QualifiedItemId": "(O)80",
+			"CoalRequiredToSmelt": 1
+		},
+		{
+			"QualifiedItemId": "(O)82",
+			"CoalRequiredToSmelt": 1
+		},
+		{
+			"QualifiedItemId": "(O)74",
+			"CoalRequiredToSmelt": 1
+		},
+		{
+			"QualifiedItemId": "(O)458",
+			"CoalRequiredToSmelt": 1
+		}
+	]
 }
