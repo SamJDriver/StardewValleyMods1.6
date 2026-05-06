@@ -62,41 +62,13 @@ public static class Utils
         }
     }
 
-    /// <summary>
-    /// Read data from a JSON file in the mod's folder.
-    /// </summary>
-    /// <typeparam name="T">The model type. This should be a plain class that has public properties for the data you want. The properties can be complex types.</typeparam>
-    /// <param name="assetPath">The file path relative to the mod folder.</param>
-    /// <param name="dataHelper">The api for reading the mod data.</param>
-    /// <param name="monitor">The monitor to log into.</param>
-    /// <returns>Returns the deserialized model, or the default instance of the object.</returns>
-    public static T LoadAssetOrDefault<T>(string assetPath, IDataHelper dataHelper, IMonitor monitor) where T : class, new()
+    public static int GetHeldCountOfItem(string qualifiedId)
     {
-        T? asset = LoadAsset<T>(assetPath, dataHelper, monitor);
+        if (!Context.IsWorldReady) return 0;
 
-        if (asset is null)
-        {
-            monitor.Log($"Loading {assetPath} failed. The mod may not work correctly.", LogLevel.Error);
-            asset = new T();
-        }
-
-        return asset;
-    }
-
-    public static T? LoadAsset<T>(string assetPath, IDataHelper dataHelper, IMonitor monitor) where T : class, new()
-    {
-        T? asset = null;
-
-        try
-        {
-            asset = dataHelper.ReadJsonFile<T>(assetPath);
-        }
-        catch (Exception ex)
-        {
-            monitor.Log(ex.ToString(), LogLevel.Error);
-        }
-
-        return asset;
+        return Game1.player.Items
+            .Where(item => item?.QualifiedItemId == qualifiedId)
+            .Sum(item => item.Stack);
     }
 }
 

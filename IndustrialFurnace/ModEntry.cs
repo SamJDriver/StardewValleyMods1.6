@@ -21,23 +21,30 @@ public class ModEntry : Mod
     private readonly PerScreen<List<Logic.IndustrialFurnace>> _onScreenFurnaces 
         = new PerScreen<List<Logic.IndustrialFurnace>>(() => new List<Logic.IndustrialFurnace>());
 
-    private readonly PerScreen<int> _onScreenFurnacesBuilt = new PerScreen<int>(() => 0);      // Used to identify furnaces, placed in maxOccupants field.
+    private SmeltingRules _smeltingRules;
 
-    private SmeltingRules smeltingRules;
+
+    private bool _insufficientCoalFlag = false;
+    //private string _movedItemQualifiedId = "";
+    //private int _quantityOfOreMoved = 0;
+    //pivate int _
 
     public override void Entry(IModHelper helper)
     {
         i18n = helper.Translation;
         config = helper.ReadConfig<ModConfig>();
 
-        this.smeltingRules = helper.Data.ReadJsonFile<SmeltingRules>("assets/SmeltingRules.json");
+        this._smeltingRules = helper.Data.ReadJsonFile<SmeltingRules>("assets/SmeltingRules.json");
 
 
         helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
         helper.Events.World.BuildingListChanged += this.OnBuildingListChanged;
-        helper.Events.Player.InventoryChanged += this.OnPlayerInventoryChanged;
+        //helper.Events.Player.InventoryChanged += this.OnPlayerInventoryChanged;
         helper.Events.Display.MenuChanged += this.OnMenuChanged;
+        helper.Events.Input.ButtonPressed += this.OnMouseButtonPressed;
+
+
     }
 
     private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
@@ -64,11 +71,15 @@ public class ModEntry : Mod
 
     private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
     {
-        if (!Context.IsWorldReady) return;
+        if (!Context.IsWorldReady)
+        {
+            return;
+        }
 
         // Check roughly every 20 ticks (1/3 second) for a natural smoke flow
         if (e.IsMultipleOf(20))
         {
+
             foreach (Building building in Game1.getFarm().buildings)
             {
                 if (building.buildingType.Value.ToLower().Contains("furnace") && building.hasLoaded)
@@ -113,80 +124,162 @@ public class ModEntry : Mod
     }
 
 
+    /// <summary>
+    /// Check to see if the player places an item in a furnace chest. If they did, remove the relevant amount of coal from 
+    /// the player's inventory
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    //private void OnPlayerInventoryChanged(object sender, InventoryChangedEventArgs e)
+    //{
+    //    if ((!Game1.player.currentLocation.IsBuildableLocation())
+    //        || _onScreenFurnaces.Value.Count() <= 0
+    //        || (!_onScreenFurnaces.Value.Any(f => f.IsInputChestOpenFlag)))
+    //    {
+    //        return;
+    //    }
+
+    //    int totalOresPlaced = 0;
+    //    string movedItemQualifiedId = "";
+
+    //    // 1. Handle full stacks moved (Slot cleared)
+    //    foreach (Item item in e.Removed)
+    //    {
+    //        if (_smeltingRules.OreCoalCosts.Any(o => o.QualifiedItemId == item.QualifiedItemId))
+    //        {
+    //            totalOresPlaced += item.Stack;
+    //            movedItemQualifiedId = item.QualifiedItemId;
+    //        }
+    //    }
+
+    //    // 2. Handle partial stacks moved (Stack reduced)
+    //    foreach (ItemStackSizeChange change in e.QuantityChanged)
+    //    {
+    //        if (_smeltingRules.OreCoalCosts.Any(o => o.QualifiedItemId == change.Item.QualifiedItemId) && change.NewSize < change.OldSize)
+    //        {
+    //            totalOresPlaced += (change.OldSize - change.NewSize);
+    //            movedItemQualifiedId = change.Item.QualifiedItemId;
+    //        }
+    //    }
+
+    //    if (totalOresPlaced > 0)
+    //    {
+    //        this._movedItemQualifiedId = movedItemQualifiedId;
+    //        this._quantityOfOreMoved = totalOresPlaced;
+
+    //        int amountOfCoalToRemove = (_smeltingRules.OreCoalCosts.First(o => o.QualifiedItemId == movedItemQualifiedId).CoalRequiredToSmelt) * (totalOresPlaced);
+    //        int playerHeldAmountOfCoal = Utils.GetHeldCountOfItem("(O)382");
+
+    //        if (amountOfCoalToRemove <= playerHeldAmountOfCoal)
+    //        {
+    //            Utils.RemoveItemFromPlayerInventory("(O)382", amountOfCoalToRemove);
+    //        }
+    //        else
+    //        {
+    //            Game1.addHUDMessage(new HUDMessage("Insufficient amount of coal", HUDMessage.error_type));
+    //            //Utils.AddItemToPlayer(movedItemQualifiedId, totalOresPlaced);
+    //            this._insufficientCoalFlag = true;
 
 
-    private void OnPlayerInventoryChanged(object sender, InventoryChangedEventArgs e)
+    //            foreach(var item in e.Removed)
+    //            {
+    //                item.Stack = 0;
+    //            }
+
+    //            foreach (var item in e.Added)
+    //            {
+
+    //                item.Stack = 0;
+    //            }
+
+    //        }
+    //    }
+    //}
+
+
+    /// <summary>
+    /// Check if the player clicked on an item in their inventory or chest. Then run the coal calculations
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void OnMouseButtonPressed(object sender, ButtonPressedEventArgs e)
     {
-        
-        if ((!Game1.player.currentLocation.IsBuildableLocation())
-            || _onScreenFurnaces.Value.Count() <= 0
-            || _onScreenFurnacesBuilt.Value <= 0
-            || (!_onScreenFurnaces.Value.Any(f => f.IsInputChestOpenFlag)))
+        if (!_onScreenFurnaces.Value.Any(f => f.IsInputChestOpenFlag)
+            || (e.Button != SButton.MouseLeft && e.Button != SButton.MouseRight)
+            || !Context.IsWorldReady
+            || Game1.activeClickableMenu == null
+            || Game1.activeClickableMenu is not ItemGrabMenu)
         {
             return;
         }
-        // Define the Ore IDs we care about
-        //HashSet<string> oreIds = new HashSet<string> { "(O)378", "(O)380", "(O)384", "(O)386" };
-        int totalOresPlaced = 0;
-        string itemQualifiedId = "";
 
-        // 1. Handle full stacks moved (Slot cleared)
-        foreach (Item item in e.Removed)
+        // Get current mouse positionz  
+        int x = (int)Game1.getMousePosition().X;
+        int y = (int)Game1.getMousePosition().Y;
+
+        var grabMenu = (Game1.activeClickableMenu as ItemGrabMenu)!;
+
+
+        // Check player's bottom inventory grid
+        ClickableComponent? playerSlot = grabMenu.inventory.inventory.FirstOrDefault(c => c.containsPoint(x, y));
+
+        if (playerSlot == null)
         {
-            if (smeltingRules.OreCoalCosts.Any(o => o.QualifiedItemId == item.QualifiedItemId))
-            {
-                totalOresPlaced += item.Stack;
-                itemQualifiedId = item.QualifiedItemId;
-            }
+            return;
         }
+        int index = int.Parse(playerSlot.name);
+        Item? item = Game1.player.Items?.ElementAtOrDefault(index);
 
-        // 2. Handle partial stacks moved (Stack reduced)
-        foreach (ItemStackSizeChange change in e.QuantityChanged)
+        if (item != null)
         {
-            if (smeltingRules.OreCoalCosts.Any(o => o.QualifiedItemId == change.Item.QualifiedItemId) && change.NewSize < change.OldSize)
+            this.Monitor.Log($"Released over player item: {item.DisplayName}", LogLevel.Debug);
+
+            int itemCount = e.Button == SButton.MouseRight ? 1 : item.Stack;
+            int amountOfCoalToRemove = (_smeltingRules.OreCoalCosts.First(o => o.QualifiedItemId == item.QualifiedItemId).CoalRequiredToSmelt) * (itemCount);
+            int playerHeldAmountOfCoal = Utils.GetHeldCountOfItem("(O)382");
+
+            if (amountOfCoalToRemove <= playerHeldAmountOfCoal)
             {
-                totalOresPlaced += (change.OldSize - change.NewSize);
-                itemQualifiedId = change.Item.QualifiedItemId;
+                Utils.RemoveItemFromPlayerInventory("(O)382", amountOfCoalToRemove);
+                this._insufficientCoalFlag = false;
+
             }
-        }
+            else
+            {
+                Game1.addHUDMessage(new HUDMessage("Insufficient amount of coal", HUDMessage.error_type));
+                this._insufficientCoalFlag = true;
+                this.Helper.Input.Suppress(e.Button);
+            }
 
-        if (totalOresPlaced > 0)
-        {
-            this.Monitor.Log($"Detected {totalOresPlaced} ores moved to the chest.", LogLevel.Info);
-            this.Monitor.Log($"Removed item {itemQualifiedId}.", LogLevel.Info);
 
-
-            int amountOfCoalToRemove = (smeltingRules.OreCoalCosts.First(o => o.QualifiedItemId == itemQualifiedId).CoalRequiredToSmelt) * (totalOresPlaced);
-            Utils.RemoveItemFromPlayerInventory("(O)382", amountOfCoalToRemove);
         }
 
     }
 
 
+    /// <summary>
+    /// When the list of buildings changes, make sure to add any furnaces to the list of furnaces
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
     private void OnBuildingListChanged(object? sender, BuildingListChangedEventArgs e)
     {
-        // Add added furnaces to the controller list
-        foreach (Building building in e.Added)
+        // If none of the buildings added were the furnace, just return
+        if (!e.Added.Any(b => b.BuildingIsIndustrialFurnaceFlag()))
         {
-
-            if (!building.BuildingIsIndustrialFurnaceFlag())
-            {
-                return;
-            }
-            // Add the controller that takes care of the functionality of the furnace
-            Logic.IndustrialFurnace? furnace = new Logic.IndustrialFurnace(); 
-            building.DeepCloneTo(furnace);
-
-            if (furnace == null)
-            {
-                return;
-            }
-            furnace!.IndustrialFurnaceId = _onScreenFurnacesBuilt.Value;
-
-            _onScreenFurnaces.Value.Add(furnace);
-            _onScreenFurnacesBuilt.Value++;
-
+            return;
         }
+
+        // Use the farm buildings because for some reason only these have the chests
+        foreach (Building farmBuildings in Game1.getFarm().buildings.Where(b => b.BuildingIsIndustrialFurnaceFlag()))
+        {
+            Logic.IndustrialFurnace furnace = new Logic.IndustrialFurnace();
+            farmBuildings.DeepCloneTo(furnace);
+            furnace.IndustrialFurnaceId = _onScreenFurnaces.Value.Count();
+            _onScreenFurnaces.Value.Add(furnace);
+        }
+
+        
 
         // Remove destroyed furnaces from the controller list
         //foreach (Building building in e.Removed)
