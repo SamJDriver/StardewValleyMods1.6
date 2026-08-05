@@ -8,7 +8,7 @@ public static class Extensions
 
     public static bool BuildingIsIndustrialFurnaceFlag(this Building building)
     {
-        return building.buildingType.Value.ToLower().Contains("furnace");
+        return building.buildingType.Value.ToLower().Contains("vechio.megafurnace");
     }
 
     public static bool BuildingIsInRangeOfPlayer(this Building building)

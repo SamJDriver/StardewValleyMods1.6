@@ -20,8 +20,7 @@ public class ModEntry : Mod
 
     private readonly PerScreen<List<Logic.IndustrialFurnace>> _onScreenFurnaces 
         = new PerScreen<List<Logic.IndustrialFurnace>>(() => new List<Logic.IndustrialFurnace>());
-
-    private SmeltingRules _smeltingRules;
+    private SmeltingRules? _smeltingRules;
 
 
     private bool _insufficientCoalFlag = false;
@@ -40,7 +39,6 @@ public class ModEntry : Mod
         helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
         helper.Events.World.BuildingListChanged += this.OnBuildingListChanged;
-        //helper.Events.Player.InventoryChanged += this.OnPlayerInventoryChanged;
         helper.Events.Display.MenuChanged += this.OnMenuChanged;
         helper.Events.Input.ButtonPressed += this.OnMouseButtonPressed;
 
@@ -49,24 +47,25 @@ public class ModEntry : Mod
 
     private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
     {
+        this.populateOnScreenFurnaces();
 
-        Farm farm = Game1.getFarm();
-        string buildingId = "Vechio.MEGAFurnace_Furnace"; // The ID from Data/Buildings
-        Vector2 tileLocation = new Vector2(63, 19); // X, Y coordinates on the farm
+        //Farm farm = Game1.getFarm();
+        //string buildingId = "Vechio.MEGAFurnace_Furnace"; // The ID from Data/Buildings
+        //Vector2 tileLocation = new Vector2(63, 19); // X, Y coordinates on the farm
 
-        // 1. Create the building instance
-        Building newBuilding = Building.CreateInstanceFromId(buildingId, tileLocation);
+        //// 1. Create the building instance
+        //Building newBuilding = Building.CreateInstanceFromId(buildingId, tileLocation);
 
-        if (newBuilding != null)
-        {
-            // 2. Add it to the farm's building list
-            farm.buildings.Add(newBuilding);
+        //if (newBuilding != null)
+        //{
+        //    // 2. Add it to the farm's building list
+        //    //farm.buildings.Add(newBuilding);
 
-            newBuilding.FinishConstruction();
+        //    //newBuilding.FinishConstruction();
 
-            // 3. Optional: Instantly finish construction if you don't want a "building site"
-            this.Monitor.Log($"Successfully created {buildingId} at {tileLocation}.", LogLevel.Debug);
-        }
+        //    // 3. Optional: Instantly finish construction if you don't want a "building site"
+        //    this.Monitor.Log($"Successfully created {buildingId} at {tileLocation}.", LogLevel.Debug);
+        //}
     }
 
     private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
@@ -82,7 +81,7 @@ public class ModEntry : Mod
 
             foreach (Building building in Game1.getFarm().buildings)
             {
-                if (building.buildingType.Value.ToLower().Contains("furnace") && building.hasLoaded)
+                if (building.BuildingIsIndustrialFurnaceFlag() && building.hasLoaded)
                 {
                     // Logic to check if chest has items
                     bool isWorking = building.buildingChests
@@ -90,7 +89,7 @@ public class ModEntry : Mod
 
                     if (isWorking)
                     {
-                        TemporaryAnimatedSprite smoke = this.CreateSmokeSprite(building.tileX.Value, building.tileY.Value);
+                        TemporaryAnimatedSprite smoke = this.createSmokeSprite(building.tileX.Value, building.tileY.Value);
                         // 3. Add it to the map
                         Game1.getFarm().TemporarySprites.Add(smoke);
                     }
@@ -270,14 +269,7 @@ public class ModEntry : Mod
             return;
         }
 
-        // Use the farm buildings because for some reason only these have the chests
-        foreach (Building farmBuildings in Game1.getFarm().buildings.Where(b => b.BuildingIsIndustrialFurnaceFlag()))
-        {
-            Logic.IndustrialFurnace furnace = new Logic.IndustrialFurnace();
-            farmBuildings.DeepCloneTo(furnace);
-            furnace.IndustrialFurnaceId = _onScreenFurnaces.Value.Count();
-            _onScreenFurnaces.Value.Add(furnace);
-        }
+        this.populateOnScreenFurnaces();
 
         
 
@@ -294,7 +286,7 @@ public class ModEntry : Mod
         //}
     }
    
-    private TemporaryAnimatedSprite CreateSmokeSprite(int x, int y)
+    private TemporaryAnimatedSprite createSmokeSprite(int x, int y)
     {
         TemporaryAnimatedSprite sprite;
 
@@ -323,6 +315,19 @@ public class ModEntry : Mod
         };
 
         return sprite;
+    }
+
+    private void populateOnScreenFurnaces()
+    {
+
+        // Use the farm buildings because for some reason only these have the chests
+        foreach (Building farmBuildings in Game1.getFarm().buildings.Where(b => b.BuildingIsIndustrialFurnaceFlag()))
+        {
+            Logic.IndustrialFurnace furnace = new Logic.IndustrialFurnace();
+            farmBuildings.DeepCloneTo(furnace);
+            furnace.IndustrialFurnaceId = _onScreenFurnaces.Value.Count();
+            _onScreenFurnaces.Value.Add(furnace);
+        }
     }
 }
 
